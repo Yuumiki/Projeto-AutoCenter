@@ -1,0 +1,86 @@
+/* ========================================
+   DASHBOARD – CARDS KPI
+======================================== */
+
+.kpi-card {
+    background: var(--surface);
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--border);
+    padding: 24px;
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    transition: var(--transition);
+    box-shadow: var(--shadow-sm);
+    overflow: hidden;
+    position: relative;
+}
+
+.kpi-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0;
+    width: 4px;
+    height: 100%;
+}
+
+.kpi-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+}
+
+.kpi-card.blue::before   { background: var(--primary); }
+.kpi-card.purple::before { background: var(--secondary); }
+.kpi-card.green::before  { background: var(--success); }
+.kpi-card.orange::before { background: var(--warning); }
+
+.kpi-icon {
+    width: 52px;
+    height: 52px;
+    border-radius: var(--radius-md);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 22px;
+    flex-shrink: 0;
+}
+
+.kpi-card.blue   .kpi-icon { background: var(--primary-light); color: var(--primary); }
+.kpi-card.purple .kpi-icon { background: #ede9fe;              color: var(--secondary); }
+.kpi-card.green  .kpi-icon { background: var(--success-light); color: var(--success); }
+.kpi-card.orange .kpi-icon { background: var(--warning-light); color: var(--warning); }
+
+.kpi-info h2 {
+    font-size: 30px;
+    font-weight: 800;
+    color: var(--text);
+    line-height: 1;
+    margin-bottom: 4px;
+}
+
+.kpi-info p {
+    font-size: 12px;
+    color: var(--text-muted);
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+}
+
+/* ========================================
+   GRÁFICOS
+======================================== */
+
+.chart-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 24px;
+    box-shadow: var(--shadow-sm);
+}
+
+.chart-card h4 {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 18px;
+}
