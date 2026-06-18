@@ -8,17 +8,62 @@
 // ------------------------------------------------
 // STORAGE – helpers genéricos
 // ------------------------------------------------
-const Store = {
-    get(key) {
-        try { return JSON.parse(localStorage.getItem(key)) || []; }
-        catch { return []; }
+const API_URL = 'http://localhost:3000/api';
+
+const API = {
+    async get(endpoint) {
+        try {
+            const res = await fetch(`${API_URL}/${endpoint}`);
+            if (!res.ok) throw new Error('Erro na resposta do servidor');
+            return res.json();
+        } catch (err) {
+            console.error('Erro de API (GET):', err);
+            alert('Não foi possível conectar ao servidor. Certifique-se de que o backend (node server.js) está rodando.');
+            throw err;
+        }
     },
-    set(key, data) {
-        localStorage.setItem(key, JSON.stringify(data));
+    async post(endpoint, data) {
+        try {
+            const res = await fetch(`${API_URL}/${endpoint}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            });
+            if (!res.ok) throw new Error('Erro na resposta do servidor');
+            return res.json();
+        } catch (err) {
+            console.error('Erro de API (POST):', err);
+            alert('Não foi possível salvar. Certifique-se de que o backend (node server.js) está rodando.');
+            throw err;
+        }
     },
-    nextId(key) {
-        const items = Store.get(key);
-        return items.length ? Math.max(...items.map(i => i.id)) + 1 : 1;
+    async put(endpoint, id, data) {
+        try {
+            const res = await fetch(`${API_URL}/${endpoint}/${id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            });
+            if (!res.ok) throw new Error('Erro na resposta do servidor');
+            return res.json();
+        } catch (err) {
+            console.error('Erro de API (PUT):', err);
+            alert('Não foi possível atualizar. Certifique-se de que o backend (node server.js) está rodando.');
+            throw err;
+        }
+    },
+    async delete(endpoint, id) {
+        try {
+            const res = await fetch(`${API_URL}/${endpoint}/${id}`, {
+                method: 'DELETE'
+            });
+            if (!res.ok) throw new Error('Erro na resposta do servidor');
+            return res.json();
+        } catch (err) {
+            console.error('Erro de API (DELETE):', err);
+            alert('Não foi possível excluir. Certifique-se de que o backend (node server.js) está rodando.');
+            throw err;
+        }
     }
 };
 
@@ -26,10 +71,16 @@ const Store = {
 // AUTENTICAÇÃO
 // ------------------------------------------------
 const Auth = {
-    USERS: [{ user: 'admin', pass: 'admin' }],
-
-    login(user, pass) {
-        return this.USERS.some(u => u.user === user && u.pass === pass);
+    async login(user, pass) {
+        try {
+            const res = await fetch(API_URL + '/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ user, pass })
+            });
+            const data = await res.json();
+            return data.success;
+        } catch(e) { return false; }
     },
 
     check() {
@@ -57,9 +108,6 @@ function highlightSidebarLink() {
     });
 }
 
-// ------------------------------------------------
-// MÁSCARAS
-// ------------------------------------------------
 function maskCPF(v) {
     return v.replace(/\D/g,'')
             .replace(/(\d{3})(\d)/,'$1.$2')
@@ -92,30 +140,21 @@ function applyMask(input, fn) {
 // CLIENTES
 // ------------------------------------------------
 const Clientes = {
-    KEY: 'ac_clientes',
+    ENDPOINT: 'clientes',
+    list: [],
 
-    getAll() { return Store.get(this.KEY); },
+    async getAll() { this.list = await API.get(this.ENDPOINT); return this.list; },
 
-    add(obj) {
-        const list = this.getAll();
-        obj.id = Store.nextId(this.KEY);
-        list.push(obj);
-        Store.set(this.KEY, list);
-    },
+    async add(obj) { await API.post(this.ENDPOINT, obj); },
 
-    remove(id) {
-        Store.set(this.KEY, this.getAll().filter(c => c.id !== id));
-    },
+    async remove(id) { await API.delete(this.ENDPOINT, id); },
 
-    update(id, obj) {
-        const list = this.getAll().map(c => c.id === id ? { ...c, ...obj } : c);
-        Store.set(this.KEY, list);
-    },
+    async update(id, obj) { await API.put(this.ENDPOINT, id, obj); },
 
-    render() {
+    async render() {
         const tbody = document.getElementById('tbl-clientes');
         if (!tbody) return;
-        const list = this.getAll();
+        const list = await this.getAll();
         if (!list.length) {
             tbody.innerHTML = `<tr><td colspan="5" class="empty-state"><i class="fa-solid fa-users"></i><br>Nenhum cliente cadastrado ainda.</td></tr>`;
             return;
@@ -134,7 +173,7 @@ const Clientes = {
     },
 
     startEdit(id) {
-        const c = this.getAll().find(x => x.id === id);
+        const c = this.list.find(x => x.id === id);
         if (!c) return;
         document.getElementById('cli-id').value    = c.id;
         document.getElementById('cli-nome').value  = c.nome;
@@ -146,14 +185,14 @@ const Clientes = {
         document.querySelector('.form-card').scrollIntoView({ behavior: 'smooth' });
     },
 
-    confirmRemove(id) {
+    async confirmRemove(id) {
         if (confirm('Excluir este cliente?')) {
-            this.remove(id);
+            await this.remove(id);
             this.render();
         }
     },
 
-    handleSubmit(e) {
+    async handleSubmit(e) {
         e.preventDefault();
         const id    = parseInt(document.getElementById('cli-id').value);
         const obj   = {
@@ -163,11 +202,7 @@ const Clientes = {
             cpf:      document.getElementById('cli-cpf').value.trim(),
         };
         if (!obj.nome) return alert('Nome é obrigatório.');
-        if (id) {
-            Clientes.update(id, obj);
-        } else {
-            Clientes.add(obj);
-        }
+        if (id) { await Clientes.update(id, obj); } else { await Clientes.add(obj); }
         document.getElementById('form-clientes').reset();
         document.getElementById('cli-id').value = '';
         document.getElementById('btn-cli-submit').textContent = 'Cadastrar Cliente';
@@ -179,29 +214,21 @@ const Clientes = {
 // VEÍCULOS
 // ------------------------------------------------
 const Veiculos = {
-    KEY: 'ac_veiculos',
+    ENDPOINT: 'veiculos',
+    list: [],
 
-    getAll() { return Store.get(this.KEY); },
+    async getAll() { this.list = await API.get(this.ENDPOINT); return this.list; },
 
-    add(obj) {
-        const list = this.getAll();
-        obj.id = Store.nextId(this.KEY);
-        list.push(obj);
-        Store.set(this.KEY, list);
-    },
+    async add(obj) { await API.post(this.ENDPOINT, obj); },
 
-    remove(id) {
-        Store.set(this.KEY, this.getAll().filter(v => v.id !== id));
-    },
+    async remove(id) { await API.delete(this.ENDPOINT, id); },
 
-    update(id, obj) {
-        Store.set(this.KEY, this.getAll().map(v => v.id === id ? { ...v, ...obj } : v));
-    },
+    async update(id, obj) { await API.put(this.ENDPOINT, id, obj); },
 
-    render() {
+    async render() {
         const tbody = document.getElementById('tbl-veiculos');
         if (!tbody) return;
-        const list = this.getAll();
+        const list = await this.getAll();
         if (!list.length) {
             tbody.innerHTML = `<tr><td colspan="6" class="empty-state"><i class="fa-solid fa-car"></i><br>Nenhum veículo cadastrado ainda.</td></tr>`;
             return;
@@ -221,7 +248,7 @@ const Veiculos = {
     },
 
     startEdit(id) {
-        const v = this.getAll().find(x => x.id === id);
+        const v = this.list.find(x => x.id === id);
         if (!v) return;
         document.getElementById('vei-id').value          = v.id;
         document.getElementById('vei-placa').value       = v.placa;
@@ -234,14 +261,14 @@ const Veiculos = {
         document.querySelector('.form-card').scrollIntoView({ behavior: 'smooth' });
     },
 
-    confirmRemove(id) {
+    async confirmRemove(id) {
         if (confirm('Excluir este veículo?')) {
-            this.remove(id);
+            await this.remove(id);
             this.render();
         }
     },
 
-    handleSubmit(e) {
+    async handleSubmit(e) {
         e.preventDefault();
         const id  = parseInt(document.getElementById('vei-id').value);
         const obj = {
@@ -253,7 +280,7 @@ const Veiculos = {
             proprietario: document.getElementById('vei-proprietario').value.trim(),
         };
         if (!obj.placa || !obj.modelo) return alert('Placa e Modelo são obrigatórios.');
-        if (id) Veiculos.update(id, obj); else Veiculos.add(obj);
+        if (id) await Veiculos.update(id, obj); else await Veiculos.add(obj);
         document.getElementById('form-veiculos').reset();
         document.getElementById('vei-id').value = '';
         document.getElementById('btn-vei-submit').textContent = 'Cadastrar Veículo';
@@ -265,7 +292,8 @@ const Veiculos = {
 // AGENDAMENTOS
 // ------------------------------------------------
 const Agendamentos = {
-    KEY: 'ac_agendamentos',
+    ENDPOINT: 'agendamentos',
+    list: [],
 
     STATUS_CLASS: {
         'Agendado':     'badge-agendado',
@@ -274,32 +302,23 @@ const Agendamentos = {
         'Concluído':    'badge-concluido',
     },
 
-    getAll() { return Store.get(this.KEY); },
+    async getAll() { this.list = await API.get(this.ENDPOINT); return this.list; },
 
-    add(obj) {
-        const list = this.getAll();
-        obj.id = Store.nextId(this.KEY);
-        list.push(obj);
-        Store.set(this.KEY, list);
-    },
+    async add(obj) { await API.post(this.ENDPOINT, obj); },
 
-    remove(id) {
-        Store.set(this.KEY, this.getAll().filter(a => a.id !== id));
-    },
+    async remove(id) { await API.delete(this.ENDPOINT, id); },
 
-    update(id, obj) {
-        Store.set(this.KEY, this.getAll().map(a => a.id === id ? { ...a, ...obj } : a));
-    },
+    async update(id, obj) { await API.put(this.ENDPOINT, id, obj); },
 
     badgeHtml(status) {
         const cls = this.STATUS_CLASS[status] || 'badge-agendado';
         return `<span class="badge-status ${cls}">${status}</span>`;
     },
 
-    render() {
+    async render() {
         const tbody = document.getElementById('tbl-agendamentos');
         if (!tbody) return;
-        const list = this.getAll();
+        const list = await this.getAll();
         if (!list.length) {
             tbody.innerHTML = `<tr><td colspan="7" class="empty-state"><i class="fa-solid fa-calendar"></i><br>Nenhum agendamento cadastrado ainda.</td></tr>`;
             return;
@@ -320,7 +339,7 @@ const Agendamentos = {
     },
 
     startEdit(id) {
-        const a = this.getAll().find(x => x.id === id);
+        const a = this.list.find(x => x.id === id);
         if (!a) return;
         document.getElementById('age-id').value       = a.id;
         document.getElementById('age-cliente').value  = a.cliente;
@@ -333,14 +352,14 @@ const Agendamentos = {
         document.querySelector('.form-card').scrollIntoView({ behavior: 'smooth' });
     },
 
-    confirmRemove(id) {
+    async confirmRemove(id) {
         if (confirm('Excluir este agendamento?')) {
-            this.remove(id);
+            await this.remove(id);
             this.render();
         }
     },
 
-    handleSubmit(e) {
+    async handleSubmit(e) {
         e.preventDefault();
         const id  = parseInt(document.getElementById('age-id').value);
         const obj = {
@@ -352,7 +371,7 @@ const Agendamentos = {
             status:  document.getElementById('age-status').value,
         };
         if (!obj.cliente) return alert('Cliente é obrigatório.');
-        if (id) Agendamentos.update(id, obj); else Agendamentos.add(obj);
+        if (id) await Agendamentos.update(id, obj); else await Agendamentos.add(obj);
         document.getElementById('form-agendamentos').reset();
         document.getElementById('age-id').value = '';
         document.getElementById('btn-age-submit').textContent = 'Salvar Agendamento';
@@ -364,7 +383,8 @@ const Agendamentos = {
 // ORDENS DE SERVIÇO
 // ------------------------------------------------
 const Ordens = {
-    KEY: 'ac_ordens',
+    ENDPOINT: 'ordens_servico',
+    list: [],
 
     STATUS_CLASS: {
         'Aberta':       'badge-aberta',
@@ -373,32 +393,23 @@ const Ordens = {
         'Entregue':     'badge-entregue',
     },
 
-    getAll() { return Store.get(this.KEY); },
+    async getAll() { this.list = await API.get(this.ENDPOINT); return this.list; },
 
-    add(obj) {
-        const list = this.getAll();
-        obj.id = Store.nextId(this.KEY);
-        list.push(obj);
-        Store.set(this.KEY, list);
-    },
+    async add(obj) { await API.post(this.ENDPOINT, obj); },
 
-    remove(id) {
-        Store.set(this.KEY, this.getAll().filter(o => o.id !== id));
-    },
+    async remove(id) { await API.delete(this.ENDPOINT, id); },
 
-    update(id, obj) {
-        Store.set(this.KEY, this.getAll().map(o => o.id === id ? { ...o, ...obj } : o));
-    },
+    async update(id, obj) { await API.put(this.ENDPOINT, id, obj); },
 
     badgeHtml(status) {
         const cls = this.STATUS_CLASS[status] || 'badge-aberta';
         return `<span class="badge-status ${cls}">${status}</span>`;
     },
 
-    render() {
+    async render() {
         const tbody = document.getElementById('tbl-ordens');
         if (!tbody) return;
-        const list = this.getAll();
+        const list = await this.getAll();
         if (!list.length) {
             tbody.innerHTML = `<tr><td colspan="6" class="empty-state"><i class="fa-solid fa-file-invoice"></i><br>Nenhuma ordem de serviço criada ainda.</td></tr>`;
             return;
@@ -419,7 +430,7 @@ const Ordens = {
     },
 
     startEdit(id) {
-        const o = this.getAll().find(x => x.id === id);
+        const o = this.list.find(x => x.id === id);
         if (!o) return;
         document.getElementById('os-id').value        = o.id;
         document.getElementById('os-cliente').value   = o.cliente;
@@ -434,9 +445,9 @@ const Ordens = {
         document.querySelector('.form-card').scrollIntoView({ behavior: 'smooth' });
     },
 
-    confirmRemove(id) {
+    async confirmRemove(id) {
         if (confirm('Excluir esta ordem de serviço?')) {
-            this.remove(id);
+            await this.remove(id);
             this.render();
         }
     },
@@ -447,7 +458,7 @@ const Ordens = {
         document.getElementById('os-total').value = (mao + pecas).toFixed(2);
     },
 
-    handleSubmit(e) {
+    async handleSubmit(e) {
         e.preventDefault();
         const id  = parseInt(document.getElementById('os-id').value);
         const obj = {
@@ -461,7 +472,7 @@ const Ordens = {
             total:     document.getElementById('os-total').value,
         };
         if (!obj.cliente) return alert('Cliente é obrigatório.');
-        if (id) Ordens.update(id, obj); else Ordens.add(obj);
+        if (id) await Ordens.update(id, obj); else await Ordens.add(obj);
         document.getElementById('form-ordens').reset();
         document.getElementById('os-id').value = '';
         document.getElementById('btn-os-submit').textContent = 'Abrir Ordem de Serviço';
@@ -473,29 +484,21 @@ const Ordens = {
 // ESTOQUE
 // ------------------------------------------------
 const Estoque = {
-    KEY: 'ac_estoque',
+    ENDPOINT: 'estoque',
+    list: [],
 
-    getAll() { return Store.get(this.KEY); },
+    async getAll() { this.list = await API.get(this.ENDPOINT); return this.list; },
 
-    add(obj) {
-        const list = this.getAll();
-        obj.id = Store.nextId(this.KEY);
-        list.push(obj);
-        Store.set(this.KEY, list);
-    },
+    async add(obj) { await API.post(this.ENDPOINT, obj); },
 
-    remove(id) {
-        Store.set(this.KEY, this.getAll().filter(e => e.id !== id));
-    },
+    async remove(id) { await API.delete(this.ENDPOINT, id); },
 
-    update(id, obj) {
-        Store.set(this.KEY, this.getAll().map(e => e.id === id ? { ...e, ...obj } : e));
-    },
+    async update(id, obj) { await API.put(this.ENDPOINT, id, obj); },
 
-    render() {
+    async render() {
         const tbody = document.getElementById('tbl-estoque');
         if (!tbody) return;
-        const list = this.getAll();
+        const list = await this.getAll();
         if (!list.length) {
             tbody.innerHTML = `<tr><td colspan="5" class="empty-state"><i class="fa-solid fa-boxes-stacked"></i><br>Nenhum produto cadastrado ainda.</td></tr>`;
             return;
@@ -520,7 +523,7 @@ const Estoque = {
     },
 
     startEdit(id) {
-        const e = this.getAll().find(x => x.id === id);
+        const e = this.list.find(x => x.id === id);
         if (!e) return;
         document.getElementById('est-id').value        = e.id;
         document.getElementById('est-produto').value   = e.produto;
@@ -532,14 +535,14 @@ const Estoque = {
         document.querySelector('.form-card').scrollIntoView({ behavior: 'smooth' });
     },
 
-    confirmRemove(id) {
+    async confirmRemove(id) {
         if (confirm('Excluir este produto?')) {
-            this.remove(id);
+            await this.remove(id);
             this.render();
         }
     },
 
-    handleSubmit(e) {
+    async handleSubmit(e) {
         e.preventDefault();
         const id  = parseInt(document.getElementById('est-id').value);
         const obj = {
@@ -550,7 +553,7 @@ const Estoque = {
             categoria:  document.getElementById('est-categoria').value.trim(),
         };
         if (!obj.produto) return alert('Produto é obrigatório.');
-        if (id) Estoque.update(id, obj); else Estoque.add(obj);
+        if (id) await Estoque.update(id, obj); else await Estoque.add(obj);
         document.getElementById('form-estoque').reset();
         document.getElementById('est-id').value = '';
         document.getElementById('btn-est-submit').textContent = 'Adicionar Produto';
@@ -562,26 +565,19 @@ const Estoque = {
 // GALERIA
 // ------------------------------------------------
 const Galeria = {
-    KEY: 'ac_galeria',
+    ENDPOINT: 'galeria',
+    list: [],
 
-    getAll() { return Store.get(this.KEY); },
+    async getAll() { this.list = await API.get(this.ENDPOINT); return this.list; },
 
-    add(obj) {
-        const list = this.getAll();
-        obj.id = Store.nextId(this.KEY);
-        list.push(obj);
-        Store.set(this.KEY, list);
-    },
+    async add(obj) { await API.post(this.ENDPOINT, obj); },
 
-    remove(id) {
-        Store.set(this.KEY, this.getAll().filter(g => g.id !== id));
-        this.render();
-    },
+    async remove(id) { await API.delete(this.ENDPOINT, id); },
 
-    render() {
+    async render() {
         const container = document.getElementById('galeria-grid');
         if (!container) return;
-        const list = this.getAll();
+        const list = await this.getAll();
         if (!list.length) {
             container.innerHTML = `<div class="col-12 empty-state"><i class="fa-solid fa-images"></i><p>Nenhuma foto adicionada ainda.</p></div>`;
             return;
@@ -591,7 +587,7 @@ const Galeria = {
                 <div class="card galeria-card">
                     <div class="galeria-header">
                         <span class="badge-status badge-concluido"><i class="fa-solid fa-car"></i> ${g.veiculo || 'Veículo'}</span>
-                        <button class="btn-close-card" onclick="Galeria.remove(${g.id})"><i class="fa-solid fa-xmark"></i></button>
+                        <button class="btn-close-card" onclick="Galeria.confirmRemove(${g.id})"><i class="fa-solid fa-xmark"></i></button>
                     </div>
                     <div class="galeria-imgs">
                         <div class="galeria-img-box">
@@ -614,30 +610,37 @@ const Galeria = {
 // RELATÓRIOS
 // ------------------------------------------------
 const Relatorios = {
-    getResumo() {
-        const ordens = Ordens.getAll();
+    async getResumo() {
+        const ordens = await Ordens.getAll();
+        const clientes = await Clientes.getAll();
+        const veiculos = await Veiculos.getAll();
+        const agendamentos = await Agendamentos.getAll();
+        const estoque = await Estoque.getAll();
         const finaliz = ordens.filter(o => o.status === 'Finalizada' || o.status === 'Entregue');
         const receita = finaliz.reduce((acc, o) => acc + parseFloat(o.total || 0), 0);
         return {
-            clientes:    Clientes.getAll().length,
-            veiculos:    Veiculos.getAll().length,
+            clientes: clientes.length,
+            veiculos: veiculos.length,
             ordens:      ordens.length,
             receita:     receita,
-            agendamentos: Agendamentos.getAll().length,
-            estoque:     Estoque.getAll().length,
+            agendamentos: agendamentos.length,
+            estoque: estoque.length,
         };
     },
 
-    getServicosContagem() {
-        const todos = [...Agendamentos.getAll(), ...Ordens.getAll()];
+    async getServicosContagem() {
+        const ag = await Agendamentos.getAll();
+        const ord = await Ordens.getAll();
+        const todos = [...ag, ...ord];
         const cont = {};
         todos.forEach(a => { cont[a.servico] = (cont[a.servico] || 0) + 1; });
         return cont;
     },
 
-    getStatusOrdens() {
+    async getStatusOrdens() {
         const cont = {};
-        Ordens.getAll().forEach(o => { cont[o.status] = (cont[o.status] || 0) + 1; });
+        const ord = await Ordens.getAll();
+        ord.forEach(o => { cont[o.status] = (cont[o.status] || 0) + 1; });
         return cont;
     }
 };
@@ -654,11 +657,11 @@ document.addEventListener('DOMContentLoaded', () => {
     if (page === 'index.html' || page === '') {
         const form = document.getElementById('form-login');
         if (form) {
-            form.addEventListener('submit', e => {
+            form.addEventListener('submit', async e => {
                 e.preventDefault();
                 const user = document.getElementById('login-user').value.trim();
                 const pass = document.getElementById('login-pass').value;
-                if (Auth.login(user, pass)) {
+                if (await Auth.login(user, pass)) {
                     sessionStorage.setItem('ac_logged', '1');
                     window.location.href = 'pages/dashboard.html';
                 } else {
@@ -678,7 +681,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // ----- CLIENTES -----
     const formCli = document.getElementById('form-clientes');
     if (formCli) {
-        formCli.addEventListener('submit', e => Clientes.handleSubmit(e));
+        formCli.addEventListener('submit', async e => Clientes.handleSubmit(e));
         applyMask(document.getElementById('cli-tel'), maskTel);
         applyMask(document.getElementById('cli-cpf'), maskCPF);
         Clientes.render();
@@ -687,21 +690,21 @@ document.addEventListener('DOMContentLoaded', () => {
     // ----- VEÍCULOS -----
     const formVei = document.getElementById('form-veiculos');
     if (formVei) {
-        formVei.addEventListener('submit', e => Veiculos.handleSubmit(e));
+        formVei.addEventListener('submit', async e => Veiculos.handleSubmit(e));
         Veiculos.render();
     }
 
     // ----- AGENDAMENTOS -----
     const formAge = document.getElementById('form-agendamentos');
     if (formAge) {
-        formAge.addEventListener('submit', e => Agendamentos.handleSubmit(e));
+        formAge.addEventListener('submit', async e => Agendamentos.handleSubmit(e));
         Agendamentos.render();
     }
 
     // ----- ORDENS -----
     const formOS = document.getElementById('form-ordens');
     if (formOS) {
-        formOS.addEventListener('submit', e => Ordens.handleSubmit(e));
+        formOS.addEventListener('submit', async e => Ordens.handleSubmit(e));
         ['os-mao-obra','os-pecas-valor'].forEach(id => {
             const el = document.getElementById(id);
             if (el) el.addEventListener('input', Ordens.calcTotal);
@@ -712,14 +715,14 @@ document.addEventListener('DOMContentLoaded', () => {
     // ----- ESTOQUE -----
     const formEst = document.getElementById('form-estoque');
     if (formEst) {
-        formEst.addEventListener('submit', e => Estoque.handleSubmit(e));
+        formEst.addEventListener('submit', async e => Estoque.handleSubmit(e));
         Estoque.render();
     }
 
     // ----- GALERIA -----
     const formGal = document.getElementById('form-galeria');
     if (formGal) {
-        formGal.addEventListener('submit', e => {
+        formGal.addEventListener('submit', async e => {
             e.preventDefault();
             const veiculo  = document.getElementById('gal-veiculo').value.trim();
             const descricao = document.getElementById('gal-descricao').value.trim();
@@ -730,8 +733,8 @@ document.addEventListener('DOMContentLoaded', () => {
             const reader1 = new FileReader();
             reader1.onload = ev1 => {
                 const reader2 = new FileReader();
-                reader2.onload = ev2 => {
-                    Galeria.add({ veiculo, descricao, antes: ev1.target.result, depois: ev2.target.result });
+                reader2.onload = async ev2 => {
+                    await Galeria.add({ veiculo, descricao, antes: ev1.target.result, depois: ev2.target.result });
                     formGal.reset();
                     document.getElementById('preview-antes').style.display  = 'none';
                     document.getElementById('preview-depois').style.display = 'none';
@@ -774,8 +777,8 @@ document.addEventListener('DOMContentLoaded', () => {
 // ------------------------------------------------
 // DASHBOARD – gráficos e KPIs
 // ------------------------------------------------
-function initDashboard() {
-    const res = Relatorios.getResumo();
+async function initDashboard() {
+    const res = await Relatorios.getResumo();
     const setKpi = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
     setKpi('kpi-clientes',     res.clientes);
     setKpi('kpi-veiculos',     res.veiculos);
@@ -787,7 +790,7 @@ function initDashboard() {
     // Gráfico de barras – serviços
     const ctxBar = document.getElementById('graficoServicos');
     if (ctxBar) {
-        const cont = Relatorios.getServicosContagem();
+        const cont = await Relatorios.getServicosContagem();
         const labels = Object.keys(cont).length ? Object.keys(cont) : ['Troca de Óleo','Lavagem','Polimento','Vitrificação','Revisão'];
         const data   = Object.keys(cont).length ? Object.values(cont) : [30,45,20,15,18];
         new Chart(ctxBar, {
@@ -800,7 +803,7 @@ function initDashboard() {
     // Gráfico pizza – distribuição
     const ctxPie = document.getElementById('graficoPizza');
     if (ctxPie) {
-        const status = Relatorios.getStatusOrdens();
+        const status = await Relatorios.getStatusOrdens();
         const labels = Object.keys(status).length ? Object.keys(status) : ['Mecânica','Estética'];
         const data   = Object.keys(status).length ? Object.values(status) : [60,40];
         new Chart(ctxPie, {
@@ -813,7 +816,8 @@ function initDashboard() {
     // Tabela próximos agendamentos
     const tbody = document.getElementById('tbl-proximos');
     if (tbody) {
-        const list = Agendamentos.getAll().slice(0,5);
+        const ag = await Agendamentos.getAll();
+        const list = ag.slice(0,5);
         if (!list.length) {
             tbody.innerHTML = `<tr><td colspan="4" class="empty-state">Nenhum agendamento.</td></tr>`;
         } else {
@@ -832,8 +836,8 @@ function initDashboard() {
 // ------------------------------------------------
 // RELATÓRIOS – gráficos
 // ------------------------------------------------
-function initRelatorios() {
-    const res = Relatorios.getResumo();
+async function initRelatorios() {
+    const res = await Relatorios.getResumo();
     const PALETA = ['#2563eb','#7c3aed','#059669','#d97706','#0891b2','#dc2626'];
 
     document.getElementById('rel-receita')     && (document.getElementById('rel-receita').textContent     = 'R$ ' + res.receita.toFixed(2).replace('.',','));
@@ -843,7 +847,7 @@ function initRelatorios() {
 
     const ctxBar = document.getElementById('grafico-rel-bar');
     if (ctxBar) {
-        const cont = Relatorios.getServicosContagem();
+        const cont = await Relatorios.getServicosContagem();
         const labels = Object.keys(cont).length ? Object.keys(cont) : ['Lavagem','Polimento','Revisão','Troca de Óleo'];
         const data   = Object.keys(cont).length ? Object.values(cont) : [25,15,12,30];
         new Chart(ctxBar, {
@@ -855,7 +859,7 @@ function initRelatorios() {
 
     const ctxDoughnut = document.getElementById('grafico-rel-pizza');
     if (ctxDoughnut) {
-        const status = Relatorios.getStatusOrdens();
+        const status = await Relatorios.getStatusOrdens();
         const labels = Object.keys(status).length ? Object.keys(status) : ['Mecânica','Estética','Revisão'];
         const data   = Object.keys(status).length ? Object.values(status) : [45,35,20];
         new Chart(ctxDoughnut, {
